@@ -5,7 +5,6 @@
 Possible options to add to the parser:
 
 - Optional offsets array to modify, so we don't need to create a new offsets list (we would need to be careful not to overwrite things if a row needs to be truncated.)
-- Comment character at the start of the line
 - Skip empty whitespace lines
 - Skip rows with empty columns
 - Logging an error for too many or too few fields on a line
@@ -54,6 +53,12 @@ export namespace IParser {
      * The delimiter to use. Defaults to ','.
      */
     delimiter?: string;
+
+    /**
+     * A character marking comment rows. Comment rows are returned in the parsed
+     * output but do not influence column detection.
+     */
+    comment?: string;
 
     /**
      * The row delimiter to use. Defaults to '\r\n'.
@@ -162,6 +167,7 @@ export function parseDSV(options: IParser.IOptions): IParser.IResults {
     data,
     columnOffsets,
     delimiter = ',',
+    comment = undefined,
     startIndex = 0,
     maxRows = 0xffffffff,
     rowDelimiter = '\r\n',
@@ -170,6 +176,32 @@ export function parseDSV(options: IParser.IOptions): IParser.IResults {
 
   // ncols will be set automatically if it is undefined.
   let ncols = options.ncols;
+
+  // When comment rows precede the data, use the first non-comment row to
+  // determine the default number of columns while still returning comment rows.
+  if (ncols === undefined && comment) {
+    let firstDataRow = startIndex;
+    while (firstDataRow < data.length && data.startsWith(comment, firstDataRow)) {
+      const nextRow = data.indexOf(rowDelimiter, firstDataRow);
+      if (nextRow === -1) {
+        firstDataRow = data.length;
+        break;
+      }
+      firstDataRow = nextRow + rowDelimiter.length;
+    }
+    ncols =
+      firstDataRow < data.length
+        ? parseDSV({
+            data,
+            columnOffsets: true,
+            delimiter,
+            rowDelimiter,
+            quote,
+            startIndex: firstDataRow,
+            maxRows: 1
+          }).ncols
+        : 1;
+  }
 
   // The number of rows we've already parsed.
   let nrows = 0;
@@ -211,6 +243,7 @@ export function parseDSV(options: IParser.IOptions): IParser.IResults {
 
   // Declare some useful temporaries
   let char;
+  let rowIsComment = false;
 
   // Loop through the data string
   while (i < endIndex) {
@@ -224,6 +257,7 @@ export function parseDSV(options: IParser.IOptions): IParser.IResults {
       // Start a new row and reset the column counter.
       offsets.push(i);
       col = 1;
+      rowIsComment = comment ? data.startsWith(comment, i) : false;
     }
 
     // Below, we handle this character, modify the parser state and increment the index to be consistent.
@@ -406,13 +440,12 @@ export function parseDSV(options: IParser.IOptions): IParser.IResults {
     switch (state) {
       case NEW_ROW:
         nrows++;
-        maxNcols = Math.max(maxNcols, col);
+        if (!rowIsComment) {
+          maxNcols = Math.max(maxNcols, col);
+        }
 
-        // If ncols is undefined, set it to the number of columns in this row (first row implied).
-        if (ncols === undefined) {
-          if (nrows !== 1) {
-            throw new Error('Error parsing default number of columns');
-          }
+        // If ncols is undefined, set it from the first non-comment row.
+        if (ncols === undefined && !rowIsComment) {
           ncols = col;
         }
 
@@ -457,7 +490,9 @@ export function parseDSV(options: IParser.IOptions): IParser.IResults {
   // defined.
   if (state !== NEW_ROW) {
     nrows++;
-    maxNcols = Math.max(maxNcols, col);
+    if (!rowIsComment) {
+      maxNcols = Math.max(maxNcols, col);
+    }
     if (columnOffsets === true) {
       // If ncols is *still* undefined, then we only parsed one row and didn't
       // have a newline, so set it to the number of columns we found.
@@ -499,6 +534,7 @@ export function parseDSVNoQuotes(options: IParser.IOptions): IParser.IResults {
     data,
     columnOffsets,
     delimiter = ',',
+    comment = undefined,
     rowDelimiter = '\r\n',
     startIndex = 0,
     maxRows = 0xffffffff
@@ -506,6 +542,31 @@ export function parseDSVNoQuotes(options: IParser.IOptions): IParser.IResults {
 
   // ncols will be set automatically if it is undefined.
   let ncols = options.ncols;
+
+  // When comment rows precede the data, use the first non-comment row to
+  // determine the default number of columns while still returning comment rows.
+  if (ncols === undefined && comment) {
+    let firstDataRow = startIndex;
+    while (firstDataRow < data.length && data.startsWith(comment, firstDataRow)) {
+      const nextRow = data.indexOf(rowDelimiter, firstDataRow);
+      if (nextRow === -1) {
+        firstDataRow = data.length;
+        break;
+      }
+      firstDataRow = nextRow + rowDelimiter.length;
+    }
+    ncols =
+      firstDataRow < data.length
+        ? parseDSVNoQuotes({
+            data,
+            columnOffsets: true,
+            delimiter,
+            rowDelimiter,
+            startIndex: firstDataRow,
+            maxRows: 1
+          }).ncols
+        : 1;
+  }
 
   // Set up our return variables.
   const offsets: number[] = [];
@@ -539,6 +600,8 @@ export function parseDSVNoQuotes(options: IParser.IOptions): IParser.IResults {
     // end of the data string.
     rowEnd = nextRow === -1 ? len : nextRow;
 
+    const rowIsComment = comment ? data.startsWith(comment, currRow) : false;
+
     // Find field delimiters in the current row.
     col = 1;
 
@@ -553,9 +616,11 @@ export function parseDSVNoQuotes(options: IParser.IOptions): IParser.IResults {
       col++;
     }
 
-    maxNcols = Math.max(maxNcols, col);
+    if (!rowIsComment) {
+      maxNcols = Math.max(maxNcols, col);
+    }
 
-    if (ncols === undefined) {
+    if (ncols === undefined && !rowIsComment) {
       // Set ncols to the number of fields we found.
       ncols = col;
     } else if (columnOffsets === true) {

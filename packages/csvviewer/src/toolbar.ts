@@ -20,6 +20,10 @@ const CSV_DELIMITER_LABEL_CLASS = 'jp-CSVDelimiter-label';
  */
 const CSV_DELIMITER_DROPDOWN_CLASS = 'jp-CSVDelimiter-dropdown';
 
+const CSV_COMMENT_CLASS = 'jp-CSVComment';
+const CSV_COMMENT_LABEL_CLASS = 'jp-CSVComment-label';
+const CSV_COMMENT_DROPDOWN_CLASS = 'jp-CSVComment-dropdown';
+
 /**
  * A widget for selecting a delimiter.
  */
@@ -56,6 +60,58 @@ export class CSVDelimiter extends Widget {
     switch (event.type) {
       case 'change':
         this._widget.delimiter = this.selectNode.value;
+        break;
+      default:
+        break;
+    }
+  }
+
+  /**
+   * Handle `after-attach` messages for the widget.
+   */
+  protected onAfterAttach(msg: Message): void {
+    this.selectNode.addEventListener('change', this);
+  }
+
+  /**
+   * Handle `before-detach` messages for the widget.
+   */
+  protected onBeforeDetach(msg: Message): void {
+    this.selectNode.removeEventListener('change', this);
+  }
+
+  protected _widget: CSVViewer;
+}
+
+/**
+ * A widget for selecting a comment character.
+ */
+export class CSVComment extends Widget {
+  /**
+   * Construct a new comment selector widget.
+   */
+  constructor(options: CSVToolbar.IOptions) {
+    super({
+      node: Private.createCommentNode(options.widget.comment, options.translator)
+    });
+    this._widget = options.widget;
+    this.addClass(CSV_COMMENT_CLASS);
+  }
+
+  /**
+   * The comment character dropdown menu.
+   */
+  get selectNode(): HTMLSelectElement {
+    return this.node.getElementsByTagName('select')![0];
+  }
+
+  /**
+   * Handle the DOM events for the widget.
+   */
+  handleEvent(event: Event): void {
+    switch (event.type) {
+      case 'change':
+        this._widget.comment = this.selectNode.value || null;
         break;
       default:
         break;
@@ -139,6 +195,42 @@ namespace Private {
     div.appendChild(label);
     const node = Styling.wrapSelect(select);
     node.classList.add(CSV_DELIMITER_DROPDOWN_CLASS);
+    div.appendChild(node);
+    return div;
+  }
+
+  /**
+   * Create the node for the comment character switcher.
+   */
+  export function createCommentNode(
+    selected: string | null,
+    translator?: ITranslator
+  ): HTMLElement {
+    translator = translator || nullTranslator;
+    const trans = translator.load('jupyterlab');
+
+    const comments = [
+      ['', trans.__('none')],
+      ['#', trans.__('hash')]
+    ];
+
+    const div = document.createElement('div');
+    const label = document.createElement('span');
+    const select = document.createElement('select');
+    label.textContent = trans.__('Comment: ');
+    label.className = CSV_COMMENT_LABEL_CLASS;
+    for (const [comment, text] of comments) {
+      const option = document.createElement('option');
+      option.value = comment;
+      option.textContent = text;
+      if (comment === (selected ?? '')) {
+        option.selected = true;
+      }
+      select.appendChild(option);
+    }
+    div.appendChild(label);
+    const node = Styling.wrapSelect(select);
+    node.classList.add(CSV_COMMENT_DROPDOWN_CLASS);
     div.appendChild(node);
     return div;
   }

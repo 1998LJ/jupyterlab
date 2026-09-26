@@ -21,7 +21,10 @@ import {
   CSVViewerFactory,
   TSVViewerFactory
 } from '@jupyterlab/csvviewer/lib/widget';
-import { CSVDelimiter } from '@jupyterlab/csvviewer/lib/toolbar';
+import {
+  CSVComment,
+  CSVDelimiter
+} from '@jupyterlab/csvviewer/lib/toolbar';
 import type { CSVViewer } from '@jupyterlab/csvviewer';
 import type { TextRenderConfig } from '@jupyterlab/csvviewer';
 import type {
@@ -114,6 +117,15 @@ function activateCsv(
       'delimiter',
       widget =>
         new CSVDelimiter({
+          widget: widget.content,
+          translator
+        })
+    );
+    toolbarRegistry.addFactory<IDocumentWidget<CSVViewer>>(
+      FACTORY_CSV,
+      'comment',
+      widget =>
+        new CSVComment({
           widget: widget.content,
           translator
         })
@@ -281,6 +293,15 @@ function activateTsv(
       'delimiter',
       widget =>
         new CSVDelimiter({
+          widget: widget.content,
+          translator
+        })
+    );
+    toolbarRegistry.addFactory<IDocumentWidget<CSVViewer>>(
+      FACTORY_TSV,
+      'comment',
+      widget =>
+        new CSVComment({
           widget: widget.content,
           translator
         })

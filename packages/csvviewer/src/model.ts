@@ -45,6 +45,7 @@ export class DSVModel extends DataModel implements IDisposable {
     let {
       data,
       delimiter = ',',
+      comment = undefined,
       rowDelimiter = undefined,
       quote = '"',
       quoteParser = undefined,
@@ -53,9 +54,9 @@ export class DSVModel extends DataModel implements IDisposable {
     } = options;
     this._rawData = data;
     this._delimiter = delimiter;
+    this._comment = comment;
     this._quote = quote;
     this._quoteEscaped = new RegExp(quote + quote, 'g');
-    this._initialRows = initialRows;
 
     // Guess the row delimiter if it was not supplied. This will be fooled if a
     // different line delimiter possibility appears in the first row.
@@ -71,6 +72,28 @@ export class DSVModel extends DataModel implements IDisposable {
     }
     this._rowDelimiter = rowDelimiter;
 
+    // The first non-comment row is the header when headers are enabled.
+    this._headerRow = header && data.length > 0 ? 0 : -1;
+    if (this._headerRow >= 0 && comment) {
+      let rowStart = 0;
+      while (rowStart < data.length && data.startsWith(comment, rowStart)) {
+        const nextRow = data.indexOf(rowDelimiter, rowStart);
+        if (nextRow === -1) {
+          this._headerRow = -1;
+          break;
+        }
+        this._headerRow++;
+        rowStart = nextRow + rowDelimiter.length;
+      }
+      if (rowStart >= data.length) {
+        this._headerRow = -1;
+      }
+    }
+    this._initialRows =
+      this._headerRow >= 0
+        ? Math.max(initialRows, this._headerRow + 1)
+        : initialRows;
+
     if (quoteParser === undefined) {
       // Check for the existence of quotes if the quoteParser is not set.
       quoteParser = data.indexOf(quote) >= 0;
@@ -80,11 +103,11 @@ export class DSVModel extends DataModel implements IDisposable {
     // Parse the data.
     this.parseAsync();
 
-    // Cache the header row.
-    if (header === true && this._columnCount! > 0) {
+    // Cache the first non-comment row as the header.
+    if (this._headerRow >= 0 && this._columnCount! > 0) {
       const h = [];
       for (let c = 0; c < this._columnCount!; c++) {
-        h.push(this._getField(0, c));
+        h.push(this._getField(this._headerRow, c));
       }
       this._header = h;
     }
@@ -164,11 +187,7 @@ export class DSVModel extends DataModel implements IDisposable {
    */
   rowCount(region: DataModel.RowRegion): number {
     if (region === 'body') {
-      if (this._header.length === 0) {
-        return this._rowCount!;
-      } else {
-        return this._rowCount! - 1;
-      }
+      return this._headerRow >= 0 ? this._rowCount! - 1 : this._rowCount!;
     }
     return 1;
   }
@@ -203,13 +222,12 @@ export class DSVModel extends DataModel implements IDisposable {
 
     // Look up the field and value for the region.
     switch (region) {
-      case 'body':
-        if (this._header.length === 0) {
-          value = this._getField(row, column);
-        } else {
-          value = this._getField(row + 1, column);
-        }
+      case 'body': {
+        const dataRow =
+          this._headerRow >= 0 && row >= this._headerRow ? row + 1 : row;
+        value = this._getField(dataRow, column);
         break;
+      }
       case 'column-header':
         if (this._header.length === 0) {
           value = (column + 1).toString();
@@ -298,6 +316,7 @@ export class DSVModel extends DataModel implements IDisposable {
       const { offsets } = PARSERS[this._parser]({
         data: this._rawData,
         delimiter: this._delimiter,
+        comment: this._comment,
         rowDelimiter: this._rowDelimiter,
         quote: this._quote,
         columnOffsets: true,
@@ -417,6 +436,7 @@ export class DSVModel extends DataModel implements IDisposable {
       data: this._rawData,
       startIndex: this._rowOffsets[this._rowCount! - reparse] ?? 0,
       delimiter: this._delimiter,
+      comment: this._comment,
       rowDelimiter: this._rowDelimiter,
       quote: this._quote,
       columnOffsets: false,
@@ -476,9 +496,9 @@ export class DSVModel extends DataModel implements IDisposable {
       this._columnOffsets.fill(0xffffffff);
       this._columnOffsetsStartingRow = 0;
 
-      if (this._header.length > 0) {
+      if (this._headerRow >= 0) {
         for (let c = this._header.length; c < this._columnCount; c++) {
-          this._header.push(this._getField(0, c));
+          this._header.push(this._getField(this._headerRow, c));
         }
       }
 
@@ -642,6 +662,7 @@ export class DSVModel extends DataModel implements IDisposable {
 
   // Parser settings
   private _delimiter: string;
+  private _comment: string | undefined;
   private _quote: string;
   private _quoteEscaped: RegExp;
   private _parser: 'quotes' | 'noquotes';
@@ -657,6 +678,10 @@ export class DSVModel extends DataModel implements IDisposable {
    * The header strings.
    */
   private _header: string[] = [];
+  /**
+   * The row used as the column header, or -1 when headers are disabled.
+   */
+  private _headerRow = -1;
   /**
    * The column offset cache, starting with row _columnOffsetsStartingRow
    *
@@ -706,6 +731,12 @@ export namespace DSVModel {
      * The field delimiter must be a single character.
      */
     delimiter: string;
+
+    /**
+     * A character marking comment rows. Comment rows remain visible but do not
+     * influence column detection or header selection.
+     */
+    comment?: string;
 
     /**
      * The data source for the data model.

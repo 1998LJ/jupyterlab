@@ -4,20 +4,24 @@
 import { Widget } from '@lumino/widgets';
 import { simulate } from 'simulate-event';
 import type { CSVViewer } from '../src';
-import { CSVDelimiter } from '../src';
+import { CSVComment, CSVDelimiter } from '../src';
 
 const DELIMITERS = [',', ';', '\t'];
+const COMMENTS = [null, '#'];
 
 describe('csvviewer/toolbar', () => {
   let delimiter = DELIMITERS[0];
+  let comment: string | null = COMMENTS[0];
   const mockViewer: jest.Mock<CSVViewer> = jest.fn().mockImplementation(() => {
     return {
-      delimiter
+      delimiter,
+      comment
     };
   });
 
   beforeEach(() => {
     delimiter = DELIMITERS[0];
+    comment = COMMENTS[0];
   });
 
   describe('CSVDelimiter', () => {
@@ -88,6 +92,37 @@ describe('csvviewer/toolbar', () => {
         widget.dispose();
         expect(widget.isDisposed).toBe(true);
       });
+    });
+  });
+
+  describe('CSVComment', () => {
+    it('should instantiate a `CSVComment` toolbar widget', () => {
+      const widget = new CSVComment({ widget: mockViewer() });
+      expect(widget).toBeInstanceOf(CSVComment);
+      expect(Array.from(widget.node.classList)).toEqual(
+        expect.arrayContaining(['jp-CSVComment'])
+      );
+      widget.dispose();
+    });
+
+    it('should allow pre-selecting the comment character', () => {
+      comment = COMMENTS[1];
+      const widget = new CSVComment({ widget: mockViewer() });
+      expect(widget.selectNode.value).toBe('#');
+      widget.dispose();
+    });
+
+    it('should change the comment character', () => {
+      const viewer = mockViewer();
+      const widget = new CSVComment({ widget: viewer });
+      widget.selectNode.value = '#';
+      widget.handleEvent({ type: 'change' } as any);
+      expect(viewer.comment).toBe('#');
+
+      widget.selectNode.value = '';
+      widget.handleEvent({ type: 'change' } as any);
+      expect(viewer.comment).toBeNull();
+      widget.dispose();
     });
   });
 });

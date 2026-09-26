@@ -14,7 +14,7 @@ import type { ISignal } from '@lumino/signaling';
 import { Signal } from '@lumino/signaling';
 import { PanelLayout, Widget } from '@lumino/widgets';
 import type * as DSVModelModule from './model';
-import { CSVDelimiter } from './toolbar';
+import { CSVComment, CSVDelimiter } from './toolbar';
 
 /**
  * The class name added to a CSV viewer.
@@ -322,6 +322,20 @@ export class CSVViewer extends Widget {
   }
 
   /**
+   * The character marking comment rows, or null when comments are disabled.
+   */
+  get comment(): string | null {
+    return this._comment;
+  }
+  set comment(value: string | null) {
+    if (value === this._comment) {
+      return;
+    }
+    this._comment = value;
+    void this._updateGrid();
+  }
+
+  /**
    * The style used by the data grid.
    */
   get style(): DataGridModule.DataGrid.Style {
@@ -379,10 +393,12 @@ export class CSVViewer extends Widget {
     const { DSVModel } = await Private.ensureDSVModel();
     const data: string = this._context.model.toString();
     const delimiter = this._delimiter;
+    const comment = this._comment ?? undefined;
     const oldModel = this._grid.dataModel as DSVModelModule.DSVModel;
     const dataModel = (this._grid.dataModel = new DSVModel({
       data,
-      delimiter
+      delimiter,
+      comment
     }));
     this._grid.selectionModel = new BasicSelectionModel({ dataModel });
     if (oldModel) {
@@ -421,6 +437,7 @@ export class CSVViewer extends Widget {
   private _monitor: ActivityMonitor<DocumentRegistry.IModel, void> | null =
     null;
   private _delimiter = ',';
+  private _comment: string | null = null;
   private _revealed = new PromiseDelegate<void>();
   private _baseRenderer: TextRenderConfig | null = null;
   private _ready: Promise<void>;
@@ -521,6 +538,13 @@ export class CSVViewerFactory extends ABCWidgetFactory<
       {
         name: 'delimiter',
         widget: new CSVDelimiter({
+          widget: widget.content,
+          translator: this.translator
+        })
+      },
+      {
+        name: 'comment',
+        widget: new CSVComment({
           widget: widget.content,
           translator: this.translator
         })

@@ -112,6 +112,25 @@ describe('csvviewer/model', () => {
       ]);
     });
 
+    it('uses the first non-comment row as the header', () => {
+      const d = new DSVModel({
+        data: '# metadata,with,extra,fields\n# units\na,b\n1,2',
+        delimiter: ',',
+        comment: '#',
+        rowDelimiter: '\n'
+      });
+
+      expect(d.columnCount('body')).toBe(2);
+      expect(d.rowCount('body')).toBe(3);
+      expect([0, 1].map(i => d.data('column-header', 0, i))).toEqual([
+        'a',
+        'b'
+      ]);
+      expect(d.data('body', 0, 0)).toBe('# metadata');
+      expect(d.data('body', 1, 0)).toBe('# units');
+      expect([0, 1].map(i => d.data('body', 2, i))).toEqual(['1', '2']);
+    });
+
     it('does not count delimiters inside quoted fields when detecting columns', () => {
       const d = new DSVModel({
         data: 'city,population\n"New York, USA",8000000,extra',

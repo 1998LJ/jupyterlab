@@ -57,6 +57,21 @@ describe('csvviewer/parse', () => {
       expect(results.offsets).toEqual([0, 2, 4, 6]);
     });
 
+    it('ignores comment rows when detecting columns', () => {
+      const data = '# metadata,with,too,many,fields\na,b,c\n1,2,3';
+      const options = { data, comment: '#', rowDelimiter: '\n' };
+
+      const rows = parser({ ...options, columnOffsets: false });
+      expect(rows.nrows).toEqual(3);
+      expect(rows.maxNcols).toEqual(3);
+
+      const columns = parser({ ...options, columnOffsets: true });
+      expect(columns.nrows).toEqual(3);
+      expect(columns.ncols).toEqual(3);
+      expect(columns.maxNcols).toEqual(3);
+      expect(columns.offsets).toHaveLength(9);
+    });
+
     it('handles changing the field delimiter', () => {
       const data = `a\tb\tc\td\n0\t1\t2\t3\n4\t5\t6\t7\n`;
       const options = { data, delimiter: '\t', rowDelimiter: '\n' };
